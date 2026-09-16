@@ -1,0 +1,5 @@
+# Versions exercised on Apple Silicon, Python 3.14.4.
+numpy==2.5.3
+scipy==1.18.1
+PySide6-Essentials==6.11.2
+shiboken6==6.11.2
