@@ -23,6 +23,9 @@ The radar project is a reference, not a runtime dependency.
 - Relative feature and filtered waveforms; optional **periodic candidate** rates.
   A candidate is not proof of breathing or person presence. Rates are cleared
   when paused, stopped, finished, failed, or waiting on stale replay data.
+- Shared-scale static pilot comparisons, using the unchanged replay processor:
+  three conditions by two repeats, publication-style PNG/PDF/SVG figures, spectra,
+  quality tables, and a local HTML gallery. See [static analysis](docs/STATIC_ANALYSIS.md).
 
 There is no live input, trained classifier, automatic best-channel search,
 data augmentation, ground-truth accuracy claim, or millimeter displacement output.
@@ -93,6 +96,39 @@ An interrupted run may leave partial outputs but no completion report. Existing
 output directories are never overwritten. Source hashes are checked before and
 after analysis; no recovery status or experiment label is rewritten.
 
+## Six-session static comparison
+
+Install the updated dependencies in the existing virtual environment once:
+
+```bash
+.venv/bin/python -m pip install -r requirements-lock.txt
+.venv/bin/python -m pip install -e .
+```
+
+Generate a new run (choose a different output folder if this one already exists):
+
+```bash
+.venv/bin/python -m wifi_csi_breathing static \
+  --catalog data/catalog.json --output results/b002-static-v1
+```
+
+Open `results/b002-static-v1/index.html` in a browser. No server or Ubuntu
+connection is needed. `SUMMARY.md` contains the numerical summary and caveats;
+`quality.csv` and `spectra.csv` support further inspection. Fifteen six-panel
+figures cover three features, each with smoothed input, filtered signal,
+normalized shape, pre-bandpass spectrum, and trailing-window periodicity.
+Every figure is exported as a 300 dpi PNG and vector PDF/SVG.
+
+Defaults match the replay baseline: TX 1 / RX 1 / reference RX 2 / subcarrier
+group 15. All records use the same configuration; there is no best-channel
+search. The common interval is 0–120 s, but full-record numerical exports and
+original status are retained in `numerical/`. The final completion marker is
+`static-report.json`, written only after figures and final source verification
+succeed. A nested `numerical/report.json` alone does not mean the static run
+finished. See the [method and figure guide](docs/STATIC_ANALYSIS.md).
+The [static validation record](docs/STATIC_VALIDATION.md) documents the test run,
+source integrity checks, and cautious descriptive findings from the pilot.
+
 ## Recreate the environment / local catalog
 
 Python 3.11 or newer is declared; this initial build was tested on Apple Silicon
@@ -137,13 +173,9 @@ physiological validity on real people.
 
 ## Research boundaries and next steps
 
-1. Add unified-scale static analysis of the six sessions: separate amplitude,
-   log-ratio, and phase-difference panels; filtered waveforms; spectra; and quality
-   summaries. Use publication-style figures with shared axes within each feature,
-   explicit invalid intervals, and separate raw-scale and normalized comparisons.
-   Preserve this replay baseline as an auxiliary tool. These figures are the next
-   milestone, not a feature of this baseline. Do not infer occupancy or breathing
-   from a spectral peak alone or tune the analysis to an assumed target rate.
+1. Inspect the shared-scale six-session figures and quality tables before adding
+   new estimators. Preserve replay as an auxiliary tool. Do not infer occupancy
+   or breathing from a spectral peak alone or tune to an assumed target rate.
 2. Add synchronized independent breathing reference measurements and more
    empty/motion/posture sessions; define evaluation at the recording level.
 3. Develop channel selection and motion/quality rejection on development data;

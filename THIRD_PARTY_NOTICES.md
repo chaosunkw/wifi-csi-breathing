@@ -52,7 +52,7 @@ is excluded from this Intel Wi-Fi project. See `docs/RADAR_REUSE_AUDIT.md`.
 
 ## Runtime dependencies
 
-NumPy, SciPy, PySide6 Essentials, and Shiboken6 are installed as separate
+NumPy, SciPy, Matplotlib, PySide6 Essentials, and Shiboken6 are installed as separate
 dependencies, not vendored in this source tree. Their installed distributions
 retain their own license notices. PySide6/Qt and Shiboken distribution obligations
 must be reviewed if a packaged application is distributed in the future. This

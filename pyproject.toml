@@ -7,7 +7,7 @@ name = "wifi-csi-breathing"
 version = "0.1.0"
 description = "Read-only Intel 5300 CSI pilot analysis and causal desktop replay"
 requires-python = ">=3.11"
-dependencies = ["numpy>=2,<3", "scipy>=1.15,<2", "PySide6-Essentials>=6.8,<7"]
+dependencies = ["numpy>=2,<3", "scipy>=1.15,<2", "PySide6-Essentials>=6.8,<7", "matplotlib>=3.9,<4"]
 
 [project.scripts]
 csi-breathing = "wifi_csi_breathing.cli:main"

@@ -19,6 +19,12 @@ def main(argv=None):
     batch.add_argument('--mode', action='append', choices=MODES, help='Repeat to compare modes; default is all three')
     for name, default in (('tx', 1), ('rx', 1), ('reference-rx', 2), ('subcarrier', 15)):
         batch.add_argument('--' + name, type=int, default=default)
+    static = sub.add_parser('static', help='Compare six pilot recordings on shared axes with publication-style figures')
+    static.add_argument('--catalog', type=Path, required=True)
+    static.add_argument('--output', type=Path, required=True, help='New directory; never overwrite an existing run')
+    static.add_argument('--seconds', type=float, default=120.0, help='Common interval starting at the first CSI packet (default: 120 s)')
+    for name, default in (('tx', 1), ('rx', 1), ('reference-rx', 2), ('subcarrier', 15)):
+        static.add_argument('--' + name, type=int, default=default)
     gui = sub.add_parser('gui', help='Open the desktop recorded-data replay viewer')
     gui.add_argument('--catalog', type=Path, required=True)
     args = parser.parse_args(argv)
@@ -30,6 +36,11 @@ def main(argv=None):
             report = analyze(load_catalog(args.catalog), args.output, args.mode or MODES,
                              args.tx, args.rx, args.reference_rx, args.subcarrier)
             print(f"Completed {len(report['results'])} dataset/feature analyses: {args.output / 'report.json'}")
+        elif args.command == 'static':
+            from .static_analysis import static_analyze
+            report = static_analyze(load_catalog(args.catalog), args.output, args.seconds,
+                                    args.tx, args.rx, args.reference_rx, args.subcarrier)
+            print(f"Completed {len(report['metrics'])} comparisons: {args.output / 'index.html'}")
         else:
             from .gui import launch
             return launch(args.catalog)
@@ -37,6 +48,6 @@ def main(argv=None):
         print(f'Error: {error}', file=sys.stderr)
         return 1
     except KeyboardInterrupt:
-        print('Cancelled. An incomplete export has no report.json.', file=sys.stderr)
+        print('Cancelled. A completed static run requires static-report.json; a completed analyze run requires report.json.', file=sys.stderr)
         return 130
     return 0
