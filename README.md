@@ -6,7 +6,8 @@ See [baseline notes](docs/BASELINE.md) for the preserved scope and next mileston
 
 This project does not start capture, initialize Ubuntu hardware, connect to SSH,
 or change `wifi-csi-monitor`. It reads the six-session B002 archive through a
-hash-verified local catalog. Original CSI, logs, and metadata remain untouched.
+hash-verified local catalog, and joint CSI/Marker sessions through verified
+transfer receipts. Original CSI, logs, and metadata remain untouched.
 The radar project is a reference, not a runtime dependency.
 
 ## What is available
@@ -26,6 +27,9 @@ The radar project is a reference, not a runtime dependency.
 - Shared-scale static pilot comparisons, using the unchanged replay processor:
   three conditions by two repeats, publication-style PNG/PDF/SVG figures, spectra,
   quality tables, and a local HTML gallery. See [static analysis](docs/STATIC_ANALYSIS.md).
+- Offline CSI / XBee manual-marker comparisons from verified joint transfers,
+  with two-panel plots on the common Ubuntu host-receipt timeline. See
+  [joint analysis](docs/JOINT_ANALYSIS.md); this is not physiological ground truth.
 
 There is no live input, trained classifier, automatic best-channel search,
 data augmentation, ground-truth accuracy claim, or millimeter displacement output.
@@ -128,6 +132,24 @@ succeed. A nested `numerical/report.json` alone does not mean the static run
 finished. See the [method and figure guide](docs/STATIC_ANALYSIS.md).
 The [static validation record](docs/STATIC_VALIDATION.md) documents the test run,
 source integrity checks, and cautious descriptive findings from the pilot.
+
+## Joint CSI and manual Marker comparison
+
+Use the individual session directory transferred by `wifi-csi-monitor`, including
+its nine data files and `transfer.json` (not the old six-session catalog):
+
+```bash
+.venv/bin/python -m wifi_csi_breathing joint \
+  --input /absolute/path/to/transferred-session \
+  --output results/joint-comparison-v1
+```
+
+Open `results/joint-comparison-v1/index.html`. The three fixed feature views each
+show CSI above and manual events below on the same axis from the stored common
+T0. PNG/PDF/SVG, numerical CSVs and a hash-verified provenance report are produced.
+This command is separate from the existing replay GUI and never connects to
+hardware. Original recordings are read-only; existing output directories cannot
+be overwritten. See [input validation, time semantics and limitations](docs/JOINT_ANALYSIS.md).
 
 ## Recreate the environment / local catalog
 
