@@ -153,6 +153,12 @@ be overwritten. See [input validation, time semantics and limitations](docs/JOIN
 
 ## Recreate the environment / local catalog
 
+For a six-session joint batch with changing spatial dimensions, use the separate
+[immutable archive and shape-separated diagnostics](docs/BATCH_DIAGNOSTICS.md).
+This preserves the transfer files byte-for-byte, records confirmed label
+corrections separately, and plots packet features for each shape without changing
+the fixed-3x3 replay processor.
+
 Python 3.11 or newer is declared; this initial build was tested on Apple Silicon
 with Python 3.14.4. Qt is used because this Mac's Python does not provide a working
 Tk runtime. A fresh environment can be created with:

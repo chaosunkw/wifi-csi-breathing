@@ -31,6 +31,15 @@ def main(argv=None):
     joint.add_argument('--mode', action='append', choices=MODES, help='Repeat to compare modes; default is all three')
     for name, default in (('tx', 1), ('rx', 1), ('reference-rx', 2), ('subcarrier', 15)):
         joint.add_argument('--' + name, type=int, default=default)
+    archive = sub.add_parser('archive-joint', help='Copy six verified joint transfers without altering source labels')
+    archive.add_argument('--source-root', type=Path, required=True)
+    archive.add_argument('--batch', required=True)
+    archive.add_argument('--corrections', type=Path, required=True)
+    archive.add_argument('--output', type=Path, required=True)
+    diagnostic = sub.add_parser('diagnose-joint', help='Plot separate CSI matrix shapes, markers and stream states')
+    diagnostic.add_argument('--archive', type=Path, required=True)
+    diagnostic.add_argument('--output', type=Path, required=True)
+    diagnostic.add_argument('--mode', action='append', choices=MODES)
     gui = sub.add_parser('gui', help='Open the desktop recorded-data replay viewer')
     gui.add_argument('--catalog', type=Path, required=True)
     args = parser.parse_args(argv)
@@ -52,6 +61,14 @@ def main(argv=None):
             report = joint_analyze(args.input, args.output, args.mode or MODES,
                                    args.tx, args.rx, args.reference_rx, args.subcarrier)
             print(f"Completed joint comparison with {report['window_markers']} manual events: {args.output / 'index.html'}")
+        elif args.command == 'archive-joint':
+            from .batch_diagnostics import archive_batch
+            report = archive_batch(args.source_root, args.batch, args.corrections, args.output)
+            print(f"Archived {len(report['sessions'])} verified sessions: {args.output / 'archive.json'}")
+        elif args.command == 'diagnose-joint':
+            from .batch_diagnostics import diagnose_archive
+            report = diagnose_archive(args.archive, args.output, args.mode or MODES)
+            print(f"Completed {len(report['summaries'])} session diagnostics: {args.output / 'index.html'}")
         else:
             from .gui import launch
             return launch(args.catalog)
@@ -59,6 +76,6 @@ def main(argv=None):
         print(f'Error: {error}', file=sys.stderr)
         return 1
     except KeyboardInterrupt:
-        print('Cancelled. Completion requires static-report.json, joint-report.json, or report.json for the selected command.', file=sys.stderr)
+        print('Cancelled. Check the completion manifest for the selected command; partial outputs are not complete runs.', file=sys.stderr)
         return 130
     return 0
