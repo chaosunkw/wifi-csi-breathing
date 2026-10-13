@@ -40,6 +40,17 @@ def main(argv=None):
     diagnostic.add_argument('--archive', type=Path, required=True)
     diagnostic.add_argument('--output', type=Path, required=True)
     diagnostic.add_argument('--mode', action='append', choices=MODES)
+    carriers = sub.add_parser('subcarriers', help='Plot all 30 subcarrier groups with separate CSI shapes')
+    carriers.add_argument('--archive', type=Path, required=True)
+    carriers.add_argument('--output', type=Path, required=True, help='New directory; never overwrite a run')
+    carriers.add_argument('--mode', action='append', choices=MODES,
+                          help='Repeat to compare modes; default: amplitude and phase_difference')
+    for name, default in (('tx', 1), ('rx', 1), ('reference-rx', 2)):
+        carriers.add_argument('--' + name, type=int, default=default)
+    carriers.add_argument('--max-gap', type=float, default=.2, help='Break lines across gaps longer than this (seconds)')
+    carriers.add_argument('--cell-seconds', type=float, default=.05, help='Maximum display width of a packet heatmap glyph')
+    carriers.add_argument('--color-percentile', type=float, default=99., help='Centered nonphase color limit percentile, 90..100')
+    carriers.add_argument('--groups', type=int, nargs='+', default=[1, 15, 30], help='One to four fixed example groups for traces')
     gui = sub.add_parser('gui', help='Open the desktop recorded-data replay viewer')
     gui.add_argument('--catalog', type=Path, required=True)
     args = parser.parse_args(argv)
@@ -69,6 +80,12 @@ def main(argv=None):
             from .batch_diagnostics import diagnose_archive
             report = diagnose_archive(args.archive, args.output, args.mode or MODES)
             print(f"Completed {len(report['summaries'])} session diagnostics: {args.output / 'index.html'}")
+        elif args.command == 'subcarriers':
+            from .subcarriers import analyze_subcarriers, DEFAULT_MODES
+            report = analyze_subcarriers(args.archive, args.output, args.mode or DEFAULT_MODES,
+                                        args.tx, args.rx, args.reference_rx, args.max_gap,
+                                        args.cell_seconds, args.color_percentile, args.groups)
+            print(f"Completed {len(report['summaries'])} session-feature views: {args.output / 'index.html'}")
         else:
             from .gui import launch
             return launch(args.catalog)

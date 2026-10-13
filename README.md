@@ -159,6 +159,12 @@ This preserves the transfer files byte-for-byte, records confirmed label
 corrections separately, and plots packet features for each shape without changing
 the fixed-3x3 replay processor.
 
+To inspect the frequency dimension, use the separate
+[all-subcarrier diagnostics](docs/SUBCARRIER_DIAGNOSTICS.md). These retrospective
+views show all 30 measured groups as heatmaps and 3D waterfalls, with fixed example
+waveforms and manual markers. They preserve configuration changes and missing
+observations and do not change the causal replay or estimate respiratory rate.
+
 Python 3.11 or newer is declared; this initial build was tested on Apple Silicon
 with Python 3.14.4. Qt is used because this Mac's Python does not provide a working
 Tk runtime. A fresh environment can be created with:
