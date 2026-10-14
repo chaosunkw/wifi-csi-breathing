@@ -38,6 +38,12 @@ def main(argv=None):
     fixed.add_argument('--mode', action='append', choices=MODES)
     for name, default in (('tx', 1), ('rx', 1), ('reference-rx', 2), ('subcarrier', 15)):
         fixed.add_argument('--' + name, type=int, default=default)
+    rate = sub.add_parser('joint-rate', help='Compare one 60 s log-ratio rate estimate with manual button counts')
+    rate.add_argument('--input', type=Path, required=True)
+    rate.add_argument('--output', type=Path, required=True, help='New directory; never overwrite a run')
+    rate.add_argument('--start', type=float, default=10.0, help='Predefined window start from common T0 (default: 10 s)')
+    for name, default in (('tx', 1), ('rx', 1), ('reference-rx', 2), ('subcarrier', 15)):
+        rate.add_argument('--' + name, type=int, default=default)
     archive = sub.add_parser('archive-joint', help='Copy six verified joint transfers without altering source labels')
     archive.add_argument('--source-root', type=Path, required=True)
     archive.add_argument('--batch', required=True)
@@ -84,6 +90,11 @@ def main(argv=None):
             report = analyze_fixed(args.input, args.output, args.rate_flags, args.mode or MODES,
                                    args.tx, args.rx, args.reference_rx, args.subcarrier)
             print(f"Completed fixed-configuration exploration: {args.output / 'index.html'}")
+        elif args.command == 'joint-rate':
+            from .rate_comparison import analyze_rate
+            report = analyze_rate(args.input, args.output, args.start,
+                                  args.tx, args.rx, args.reference_rx, args.subcarrier)
+            print(f"Completed 60 s rate comparison ({report['comparison']['status']}): {args.output / 'index.html'}")
         elif args.command == 'archive-joint':
             from .batch_diagnostics import archive_batch
             report = archive_batch(args.source_root, args.batch, args.corrections, args.output)

@@ -151,6 +151,21 @@ This command is separate from the existing replay GUI and never connects to
 hardware. Original recordings are read-only; existing output directories cannot
 be overwritten. See [input validation, time semantics and limitations](docs/JOINT_ANALYSIS.md).
 
+For a first quantitative comparison, use the separate [60 s Log Ratio rate comparison](docs/RATE_COMPARISON.md):
+
+```bash
+.venv/bin/python -m wifi_csi_breathing joint-rate \
+  --input /absolute/path/to/transferred-session \
+  --start 10 \
+  --output results/rate-comparison-v1
+```
+
+This compares one predefined `[10, 70)` s window with the received manual button
+count. It retains all reported rates within 3x3, reuses the causal filter and
+FFT/autocorrelation checks, and reports unavailable estimates explicitly.
+Pooling rates is an exploratory assumption. Manual counts are approximate
+references, not independently measured physiological ground truth.
+
 ## Recreate the environment / local catalog
 
 For an explicit, opt-in analysis that treats packets from other reported radio
