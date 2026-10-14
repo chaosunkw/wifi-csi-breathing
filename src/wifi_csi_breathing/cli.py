@@ -31,6 +31,13 @@ def main(argv=None):
     joint.add_argument('--mode', action='append', choices=MODES, help='Repeat to compare modes; default is all three')
     for name, default in (('tx', 1), ('rx', 1), ('reference-rx', 2), ('subcarrier', 15)):
         joint.add_argument('--' + name, type=int, default=default)
+    fixed = sub.add_parser('joint-fixed', help='Opt-in fixed 3x3/rate-flags analysis with bounded missing-sample gaps')
+    fixed.add_argument('--input', type=Path, required=True)
+    fixed.add_argument('--output', type=Path, required=True, help='New directory; never overwrite a run')
+    fixed.add_argument('--rate-flags', type=int, required=True, help='Explicit observed raw rate code; not Mbps or packet rate')
+    fixed.add_argument('--mode', action='append', choices=MODES)
+    for name, default in (('tx', 1), ('rx', 1), ('reference-rx', 2), ('subcarrier', 15)):
+        fixed.add_argument('--' + name, type=int, default=default)
     archive = sub.add_parser('archive-joint', help='Copy six verified joint transfers without altering source labels')
     archive.add_argument('--source-root', type=Path, required=True)
     archive.add_argument('--batch', required=True)
@@ -72,6 +79,11 @@ def main(argv=None):
             report = joint_analyze(args.input, args.output, args.mode or MODES,
                                    args.tx, args.rx, args.reference_rx, args.subcarrier)
             print(f"Completed joint comparison with {report['window_markers']} manual events: {args.output / 'index.html'}")
+        elif args.command == 'joint-fixed':
+            from .fixed_configuration import analyze_fixed
+            report = analyze_fixed(args.input, args.output, args.rate_flags, args.mode or MODES,
+                                   args.tx, args.rx, args.reference_rx, args.subcarrier)
+            print(f"Completed fixed-configuration exploration: {args.output / 'index.html'}")
         elif args.command == 'archive-joint':
             from .batch_diagnostics import archive_batch
             report = archive_batch(args.source_root, args.batch, args.corrections, args.output)

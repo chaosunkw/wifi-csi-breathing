@@ -153,6 +153,12 @@ be overwritten. See [input validation, time semantics and limitations](docs/JOIN
 
 ## Recreate the environment / local catalog
 
+For an explicit, opt-in analysis that treats packets from other reported radio
+configurations as missing observations, see [fixed-configuration analysis](docs/FIXED_CONFIGURATION.md).
+The `joint-fixed` command preserves the 0.2 s maximum interpolation gap and the
+existing causal filter. It does not lock the router's rate, alter source files,
+or change the default strict `joint` and replay behavior.
+
 For a six-session joint batch with changing spatial dimensions, use the separate
 [immutable archive and shape-separated diagnostics](docs/BATCH_DIAGNOSTICS.md).
 This preserves the transfer files byte-for-byte, records confirmed label
