@@ -42,6 +42,10 @@ def main(argv=None):
     rate.add_argument('--input', type=Path, required=True)
     rate.add_argument('--output', type=Path, required=True, help='New directory; never overwrite a run')
     rate.add_argument('--start', type=float, default=10.0, help='Predefined window start from common T0 (default: 10 s)')
+    rate.add_argument('--shape-policy', choices=('3x3', 'first-stream'), default='3x3',
+                      help='3x3 baseline (default), or experimental stream 1 across 1x3/2x3/3x3')
+    rate.add_argument('--gap-policy', choices=('reset', 'preserve-short'), default='reset',
+                      help='Original gap resets, or bounded short-gap state preservation with visible gaps')
     for name, default in (('tx', 1), ('rx', 1), ('reference-rx', 2), ('subcarrier', 15)):
         rate.add_argument('--' + name, type=int, default=default)
     archive = sub.add_parser('archive-joint', help='Copy six verified joint transfers without altering source labels')
@@ -93,7 +97,8 @@ def main(argv=None):
         elif args.command == 'joint-rate':
             from .rate_comparison import analyze_rate
             report = analyze_rate(args.input, args.output, args.start,
-                                  args.tx, args.rx, args.reference_rx, args.subcarrier)
+                                  args.tx, args.rx, args.reference_rx, args.subcarrier, args.shape_policy,
+                                  args.gap_policy)
             print(f"Completed 60 s rate comparison ({report['comparison']['status']}): {args.output / 'index.html'}")
         elif args.command == 'archive-joint':
             from .batch_diagnostics import archive_batch

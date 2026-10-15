@@ -166,6 +166,25 @@ FFT/autocorrelation checks, and reports unavailable estimates explicitly.
 Pooling rates is an exploratory assumption. Manual counts are approximate
 references, not independently measured physiological ground truth.
 
+Each minute report also shows the FFT spectrum and autocorrelation, their
+frequency candidates, and the four quality checks. Rejected candidates remain
+visible as diagnostics. Full spectrum, correlation and detrended input CSVs
+allow the displayed intermediate calculations to be inspected.
+
+For a separate comparison that also uses 1x3 and 2x3 packets, add
+`--shape-policy first-stream` and choose a new output directory. This opt-in
+experiment always uses stream 1; configuration changes alone do not reset the
+filter. It preserves shape/rate audit information without correcting spatial
+mapping changes. The default 3x3 baseline, gap limits and estimator thresholds
+are unchanged. See the [experiment and limitations](docs/RATE_COMPARISON.md#opt-in-first-stream-experiment).
+
+To test short interruptions without another 10 s blackout, also add
+`--gap-policy preserve-short`. Gaps over 0.2 s and at most 0.5 s preserve state
+using audited internal interpolation; the plotted gap remains blank. Longer
+gaps still reset, but settling is shown as dashed amber rather than hidden.
+The original `--gap-policy reset` remains available as the default comparison.
+See [gap handling](docs/RATE_COMPARISON.md#opt-in-short-gap-state-preservation).
+
 ## Recreate the environment / local catalog
 
 For an explicit, opt-in analysis that treats packets from other reported radio

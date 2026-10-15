@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 import io
+import csv
 import json
 import math
 import tempfile
@@ -12,10 +13,13 @@ import unittest
 from test_decoder import record
 from test_joint import (SESSION, T0, fixture, refresh_receipt, save_json, save_table)
 from wifi_csi_breathing.cli import main
-from wifi_csi_breathing.data import FeatureConfig, Observation, sha256
+from wifi_csi_breathing.data import FeatureConfig, Observation, feature, sha256
 from wifi_csi_breathing.joint import EVENT_FIELDS, INDEX_FIELDS
 from wifi_csi_breathing.rate_comparison import (analyze_rate, compare_reference,
-    estimate_minute, manual_reference, mixed_rate_observations, window_bounds)
+    draw_filtered, estimate_minute, gap_processing, manual_reference, mixed_rate_observations,
+    observation_gaps, window_bounds)
+from wifi_csi_breathing.fixed_configuration import segment_summary
+from wifi_csi_breathing.subcarriers import new_figure
 
 
 def signal_observations(seconds=90, hz=14/60, offset=0.0):
@@ -44,19 +48,21 @@ def mixed_capture(seconds=90):
                            inside=lambda ns: T0 <= ns < T0+round(seconds*1e9))
 
 
-def minute_fixture(folder):
+def minute_fixture(folder, gap=None):
     """Synthetic binary packets exercise the full parser/receipt/CLI path."""
     fixture(folder)
     rows, blobs, offset = [], [], 0
     for i in range(2700):
         seconds = i/30
+        if gap and gap[0] < seconds < gap[1]:
+            continue
         ntx = 1 if i % 79 == 10 else 2 if i % 113 == 11 else 3
         amplitude = round(45 * math.exp(.18*math.sin(2*math.pi*14/60*seconds)))
         blob = bytearray(record(ntx, 3, timestamp=i,
                                value=lambda g, r, t: (amplitude if r == 0 else 45, 0)))
         blob[21:23] = (273+i % 5).to_bytes(2, 'little')
         blobs.append(blob)
-        rows.append(dict(zip(INDEX_FIELDS, (i+1, offset, len(blob), T0+round(seconds*1e9), 187, i))))
+        rows.append(dict(zip(INDEX_FIELDS, (len(rows)+1, offset, len(blob), T0+round(seconds*1e9), 187, i))))
         offset += len(blob)
     (folder/'csi.dat').write_bytes(b''.join(blobs))
     save_table(folder/'csi-times.csv', INDEX_FIELDS, rows)
@@ -75,6 +81,241 @@ def minute_fixture(folder):
 
 
 class RateComparisonTests(unittest.TestCase):
+    def test_short_gap_preserves_state_and_true_time_without_ten_second_blackout(self):
+        observations = [o for o in signal_observations() if not 37 < o.time < 37.3]
+        old, _ = estimate_minute(observations)
+        result, points = estimate_minute(observations, gap_policy='preserve-short')
+        self.assertGreater(old['filter_resets'], 0)
+        self.assertEqual(result['filter_resets'], 0)
+        self.assertEqual(result['candidate_bpm'], 14)
+        self.assertEqual(result['bridged_intervals'], 1)
+        self.assertGreater(result['bridged_grid_samples'], 0)
+        self.assertEqual(result['settled_grid_samples'], 1200)
+        self.assertEqual(result['settled_unbridged_grid_samples'] + result['bridged_grid_samples'], 1200)
+        self.assertTrue(all(math.isclose(b.time-a.time, .05, abs_tol=1e-8)
+                            for a, b in zip(points, points[1:])))
+        gaps = observation_gaps(observations, 70, 'preserve-short')
+        self.assertEqual(len(gaps), 1)
+        self.assertAlmostEqual(gaps[0]['duration_s'], .3)
+        interior = [p for p in points if 37+1e-8 < p.time < 37.3-1e-8]
+        self.assertTrue(all(p.available_at >= 37.3 for p in interior))
+        # Missing internal grid values must never be drawn as received data.
+        fig = new_figure((8, 4))
+        ax = fig.subplots()
+        draw_filtered(ax, points, segment_summary(points, gap_processing('preserve-short')),
+                      10, 70, gaps, True)
+        stable = ax.lines[0]
+        pairs = list(zip(stable.get_xdata(), stable.get_ydata()))
+        self.assertTrue(all(math.isnan(y) for x, y in pairs if 37+1e-8 < x < 37.3-1e-8))
+        self.assertTrue(all(math.isfinite(y) for x, y in pairs if 37.35 < x < 47))
+        self.assertFalse(ax.patches)
+        fig.clear()
+
+    def test_gap_policy_remains_causal_and_does_not_extrapolate(self):
+        observations = [o for o in signal_observations() if not 37 < o.time < 37.3]
+        full, full_points = estimate_minute(observations, gap_policy='preserve-short')
+        for count in (1100, 1111, 1120, 2100):
+            prefix, points = estimate_minute(observations[:count], gap_policy='preserve-short')
+            cutoff = observations[count-1].time
+            self.assertEqual(points, [p for p in full_points if p.available_at <= cutoff])
+            if cutoff < 70:
+                self.assertIsNone(prefix['candidate_bpm'])
+            else:
+                self.assertEqual(full, prefix)
+        before = [o for o in observations if o.time <= 37]
+        _, points = estimate_minute(before, gap_policy='preserve-short')
+        self.assertLessEqual(max(p.time for p in points), 37+1e-8)
+        # A bounded right endpoint can complete the minute, with explicit latency.
+        delayed = [o for o in signal_observations(offset=.01) if not 69.8 < o.time < 70.1]
+        result, _ = estimate_minute(delayed, gap_policy='preserve-short')
+        self.assertEqual(result['candidate_bpm'], 14)
+        self.assertGreater(result['available_at_s'], 70.1)
+        self.assertLessEqual(result['available_at_s'], 70.5)
+        self.assertEqual(result, estimate_minute(delayed+[Observation(90.1, 999.)],
+                                               gap_policy='preserve-short')[0])
+
+    def test_long_gap_and_invalid_records_keep_resets_but_settling_is_visible(self):
+        for kind in ('long_gap', 'invalid', 'duplicate', 'boundary'):
+            observations = signal_observations()
+            if kind == 'long_gap':
+                observations = [o for o in observations if not 37 < o.time < 38]
+            elif kind == 'invalid':
+                observations[1110] = Observation(37, None)
+            elif kind == 'duplicate':
+                observations.insert(1111, observations[1110])
+            else:
+                observations[1110] = Observation(37, -.4, True, 'non_csi_record')
+            result, points = estimate_minute(observations, gap_policy='preserve-short')
+            self.assertGreater(result['filter_resets'], 0)
+            self.assertIsNone(result['candidate_bpm'])
+            self.assertEqual(result['reason'], 'filter_reset_inside_window')
+            if kind == 'long_gap':
+                self.assertFalse(any(37+1e-8 < p.time < 38-1e-8 for p in points))
+                fig = new_figure((8, 4))
+                ax = fig.subplots()
+                draw_filtered(ax, points, segment_summary(points, gap_processing('preserve-short')),
+                              10, 70, observation_gaps(observations, 70, 'preserve-short'), True)
+                dashed = [line for line in ax.lines if line.get_linestyle() == '--']
+                self.assertTrue(any(math.isfinite(y) for line in dashed
+                                    for x, y in zip(line.get_xdata(), line.get_ydata()) if 38 < x < 48))
+                self.assertFalse(ax.patches)
+                fig.clear()
+
+    def test_many_short_gaps_are_not_reported_as_full_observed_coverage(self):
+        observations = [o for o in signal_observations()
+                        if not any(t < o.time < t+.3 for t in range(12, 66, 2))]
+        result, _ = estimate_minute(observations, gap_policy='preserve-short')
+        self.assertEqual(result['filter_resets'], 0)
+        self.assertGreater(result['bridged_grid_fraction'], .05)
+        self.assertEqual(result['reason'], 'excessive_gap_interpolation')
+        self.assertIsNone(result['candidate_bpm'])
+        with self.assertRaises(ValueError):
+            estimate_minute(observations, gap_policy='anything')
+
+    def test_preserved_gap_cli_exports_blanks_and_audits_internal_interpolation(self):
+        with tempfile.TemporaryDirectory() as root:
+            source = minute_fixture(Path(root)/'source', gap=(37, 37.3))
+            before = {p.name: sha256(p) for p in source.iterdir()}
+            output = Path(root)/'output'
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(main(['joint-rate', '--input', str(source), '--output', str(output),
+                                       '--shape-policy', 'first-stream', '--gap-policy', 'preserve-short']), 0)
+            report = json.loads((output/'rate-report.json').read_text())
+            self.assertEqual(report['policy']['gap_policy'], 'preserve-short')
+            self.assertEqual(report['processing']['max_gap_seconds'], .5)
+            self.assertEqual(report['comparison']['filter_resets'], 0)
+            self.assertEqual(report['comparison']['candidate_bpm'], 14)
+            self.assertEqual(report['comparison']['received_button_count'], 14)
+            with (output/'waveform.csv').open() as stream:
+                points = list(csv.DictReader(stream))
+            missing = [p for p in points if p['in_gap'] == 'True']
+            self.assertTrue(missing)
+            self.assertTrue(all(p['display_filtered'] == '' and p['filtered'] != '' for p in missing))
+            self.assertEqual(before, {p.name: sha256(p) for p in source.iterdir()})
+            for artifact in report['artifacts']:
+                self.assertEqual(sha256(output/artifact['path']), artifact['sha256'])
+
+    def test_first_stream_has_common_indices_and_common_gain_cancellation(self):
+        capture = mixed_capture(3)
+        expected = [o.value for o in signal_observations(3)]
+        for i, packet in enumerate(capture.packets):
+            gain = (2.3 - .7j) * packet['ntx']
+            for rx in (0, 1):
+                packet['csi'][0][rx][14] *= gain
+            # Other streams must never influence selection or the ratio.
+            for stream in packet['csi'][1:]:
+                stream[0][14] = 100000j
+                stream[1][14] = 0j
+        config = FeatureConfig('log_ratio')
+        observations, audit = mixed_rate_observations(capture, config, 'first-stream')
+        self.assertEqual(len(observations), len(capture.packets))
+        self.assertEqual({a['ntx'] for a in audit}, {1, 2, 3})
+        self.assertTrue(all(a['status'] == 'kept' for a in audit))
+        for observation, value in zip(observations, expected):
+            self.assertAlmostEqual(observation.value, value)
+        # The shared baseline feature extractor remains restricted to 3x3.
+        self.assertIsNone(feature(capture.packets[10], config))
+
+    def test_first_stream_retains_long_shape_bursts_without_reset(self):
+        capture = mixed_capture()
+        for i, packet in enumerate(capture.packets):
+            if 20 <= i/30 < 22 or 30 <= i/30 < 31:
+                packet['ntx'] = 1 if i/30 < 22 else 2
+                packet['csi'] = packet['csi'][:1] * packet['ntx']
+        config = FeatureConfig('log_ratio')
+        baseline, _ = mixed_rate_observations(capture, config)
+        selected, audit = mixed_rate_observations(capture, config, 'first-stream')
+        old, _ = estimate_minute(baseline)
+        new, _ = estimate_minute(selected)
+        self.assertIsNone(old['candidate_bpm'])
+        self.assertGreater(old['filter_resets'], 0)
+        self.assertEqual(new['filter_resets'], 0)
+        self.assertEqual(new['supported_grid_fraction'], 1)
+        self.assertEqual(new['candidate_bpm'], 14)
+        self.assertTrue(any(a['shape_changed'] for a in audit))
+        # A genuine 1 s outage still prevents a complete minute estimate.
+        outage, points = estimate_minute([o for o in selected if not 40 <= o.time <= 41])
+        self.assertIsNone(outage['candidate_bpm'])
+        self.assertGreater(outage['filter_resets'], 0)
+        self.assertFalse(any(40 < p.time < 41 for p in points))
+
+    def test_first_stream_does_not_silently_correct_configuration_offsets(self):
+        capture = mixed_capture(3)
+        expected = [o.value for o in signal_observations(3)]
+        for packet in capture.packets:
+            if packet['ntx'] == 1:
+                packet['csi'][0][0][14] *= math.exp(.8)
+        observations, audit = mixed_rate_observations(capture, FeatureConfig('log_ratio'), 'first-stream')
+        for i, (observation, row) in enumerate(zip(observations, audit)):
+            self.assertAlmostEqual(observation.value, expected[i] + (.8 if row['ntx'] == 1 else 0))
+        self.assertFalse(any(o.boundary for o in observations))
+
+    def test_first_stream_invalid_packets_remain_barriers(self):
+        for kind in ('duplicate', 'unknown', 'zero', 'nan', 'infinite'):
+            with self.subTest(kind=kind):
+                capture = mixed_capture(1)
+                self.assertEqual(capture.packets[10]['ntx'], 1)
+                if kind == 'duplicate':
+                    capture.index[10]['host_monotonic_ns'] = capture.index[9]['host_monotonic_ns']
+                elif kind == 'unknown':
+                    capture.packets[10] = None
+                else:
+                    capture.packets[10]['csi'][0][1][14] = {'zero': 0j, 'nan': complex(float('nan')),
+                                                          'infinite': complex(float('inf'))}[kind]
+                observations, audit = mixed_rate_observations(capture, FeatureConfig('log_ratio'), 'first-stream')
+                self.assertTrue(observations[10].boundary)
+                self.assertIsNone(observations[10].value)
+                self.assertNotEqual(audit[10]['status'], 'kept')
+
+    def test_first_stream_policy_is_explicit_and_prefix_invariant(self):
+        capture = mixed_capture()
+        config = FeatureConfig('log_ratio')
+        for policy, feature_config in (('unknown', config), ('first-stream', FeatureConfig('log_ratio', tx=2))):
+            with self.assertRaises(ValueError):
+                mixed_rate_observations(capture, feature_config, policy)
+        full, full_audit = mixed_rate_observations(capture, config, 'first-stream')
+        full_result, full_points = estimate_minute(full)
+        for count in (600, 1500, 2110):
+            prefix = SimpleNamespace(t0=capture.t0, packets=capture.packets[:count],
+                                     index=capture.index[:count], inside=capture.inside)
+            observations, audit = mixed_rate_observations(prefix, config, 'first-stream')
+            self.assertEqual(observations, full[:count])
+            self.assertEqual(audit, full_audit[:count])
+            result, points = estimate_minute(observations)
+            self.assertEqual(points, [p for p in full_points if p.available_at <= observations[-1].time])
+            if count == 2110:
+                self.assertEqual(result, full_result)
+        # This experiment accepts only the explicitly documented three RX chains.
+        capture.packets[10]['nrx'] = 2
+        capture.packets[10]['csi'] = [s[:2] for s in capture.packets[10]['csi']]
+        _, audit = mixed_rate_observations(capture, config, 'first-stream')
+        self.assertEqual(audit[10]['status'], 'other_shape')
+
+    def test_first_stream_cli_export_and_invalid_stream_selection(self):
+        with tempfile.TemporaryDirectory() as root:
+            source = minute_fixture(Path(root)/'source')
+            before = {p.name: sha256(p) for p in source.iterdir()}
+            output = Path(root)/'output'
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(main(['joint-rate', '--input', str(source), '--output', str(output),
+                                       '--shape-policy', 'first-stream']), 0)
+            report = json.loads((output/'rate-report.json').read_text())
+            self.assertEqual(report['policy']['accepted_shapes'], [[1,3], [2,3], [3,3]])
+            self.assertEqual(report['policy']['rate_flags'], 'all_reported')
+            self.assertFalse(report['policy']['mapping_correction'])
+            self.assertEqual(set(report['window_retained_shape_counts']), {'1x3', '2x3', '3x3'})
+            self.assertTrue(report['window_shape_changes'])
+            self.assertEqual(report['comparison']['retained_packet_fraction'], 1)
+            self.assertEqual(report['comparison']['candidate_bpm'], 14)
+            self.assertEqual(report['comparison']['absolute_error_bpm'], 0)
+            for artifact in report['artifacts']:
+                self.assertEqual(sha256(output/artifact['path']), artifact['sha256'])
+            self.assertEqual(before, {p.name: sha256(p) for p in source.iterdir()})
+            with redirect_stderr(io.StringIO()):
+                self.assertEqual(main(['joint-rate', '--input', str(source), '--output', root+'/invalid',
+                                       '--shape-policy', 'first-stream', '--tx', '2']), 1)
+            self.assertFalse(Path(root+'/invalid').exists())
+
     def test_known_fourteen_per_minute_and_manual_count(self):
         result, points = estimate_minute(signal_observations())
         self.assertEqual(result['status'], 'periodic_candidate')

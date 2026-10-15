@@ -56,16 +56,35 @@ class Estimate:
     band_fraction: float
 
 
-def estimate_window(points, cfg):
-    """Trailing-window diagnostics; heuristic agreement is not probability."""
+def quality_checks(peak_bpm, ac_bpm, ac_value, concentration, fraction):
+    """The existing four heuristic gates, shared by estimation and reporting."""
+    difference = abs(peak_bpm - ac_bpm) if ac_bpm is not None else None
+    return [
+        {'name': 'Frequency agreement', 'value': difference, 'operator': '<=',
+         'threshold': 3.0, 'unit': '/min', 'passed': difference is not None and difference <= 3.0},
+        {'name': 'Autocorrelation peak', 'value': ac_value, 'operator': '>=',
+         'threshold': 0.5, 'unit': 'unitless', 'passed': ac_value >= 0.5},
+        {'name': 'Spectral concentration', 'value': concentration, 'operator': '>=',
+         'threshold': 0.6, 'unit': 'fraction', 'passed': concentration >= 0.6},
+        {'name': 'Pre-bandpass energy fraction', 'value': fraction, 'operator': '>=',
+         'threshold': 0.4, 'unit': 'fraction', 'passed': fraction >= 0.4},
+    ]
+
+
+def inspect_window(points, cfg):
+    """Return the estimate and the exact arrays behind its FFT/ACF diagnostics.
+
+    This is the single numerical path for estimation and exported plots. No
+    manual events, extra padding, spectral smoothing or alternative peaks enter.
+    """
     last = points[-1]
     raw = signal.detrend(np.array([p.raw for p in points], dtype=float))
     filtered = signal.detrend(np.array([p.filtered for p in points], dtype=float))
     energy = float(np.dot(filtered, filtered))
     raw_energy = float(np.dot(raw, raw))
     if energy < 1e-16 or raw_energy < 1e-16:
-        return Estimate(last.time, last.available_at, last.segment, 'insufficient_variation',
-                        None, None, None, 0.0, 0.0, 0.0)
+        return (Estimate(last.time, last.available_at, last.segment, 'insufficient_variation',
+                         None, None, None, 0.0, 0.0, 0.0), None)
     taper = np.hanning(len(filtered))
     frequencies = np.fft.rfftfreq(len(filtered), 1 / cfg.sample_hz)
     power = np.abs(np.fft.rfft(filtered * taper)) ** 2
@@ -88,12 +107,22 @@ def estimate_window(points, cfg):
     lag = int(peaks[np.argmax(ac[peaks])]) if len(peaks) else None
     ac_value = float(ac[lag]) if lag is not None else 0.0
     ac_bpm = cfg.sample_hz / lag * 60 if lag is not None else None
-    agrees = ac_bpm is not None and abs(peak_hz * 60 - ac_bpm) <= 3.0
-    passes = agrees and ac_value >= 0.5 and concentration >= 0.6 and fraction >= 0.4
-    return Estimate(last.time, last.available_at, last.segment,
-                    'periodic_candidate' if passes else 'inconclusive',
-                    peak_hz * 60 if passes else None, peak_hz * 60, ac_bpm,
-                    ac_value, concentration, fraction)
+    checks = quality_checks(peak_hz * 60, ac_bpm, ac_value, concentration, fraction)
+    passes = all(check['passed'] for check in checks)
+    estimate = Estimate(last.time, last.available_at, last.segment,
+                        'periodic_candidate' if passes else 'inconclusive',
+                        peak_hz * 60 if passes else None, peak_hz * 60, ac_bpm,
+                        ac_value, concentration, fraction)
+    return estimate, {'raw_detrended': raw, 'filtered_detrended': filtered,
+                      'taper': taper, 'frequencies': frequencies, 'power': power,
+                      'raw_power': raw_power, 'band': band, 'near': near, 'peak': peak,
+                      'ac': ac, 'min_lag': min_lag, 'max_lag': max_lag,
+                      'acf_peaks': peaks, 'lag': lag, 'checks': checks}
+
+
+def estimate_window(points, cfg):
+    """Trailing-window diagnostics; heuristic agreement is not probability."""
+    return inspect_window(points, cfg)[0]
 
 
 class Processor:
