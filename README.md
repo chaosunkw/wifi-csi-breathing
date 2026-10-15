@@ -1,5 +1,12 @@
 # Wi-Fi CSI Breathing
 
+For the second reproduction batch, see [WiResP adapted reproduction](docs/WIRESP_REPRODUCTION.md).
+The `compare-wiresp` command compares its amplitude/ACF enhancement pipeline with
+the unchanged FarSense core and LogRatio FFT/ACF candidates on predefined minutes.
+Intermediate images and decisions are exported. Unspecified paper parameters,
+the adapted continuity checker and the uncalibrated motion gate are documented;
+this is not a replication of the original system's reported accuracy.
+
 The first literature baseline is an independent, adapted
 [FarSense core reproduction](docs/FARSENSE_REPRODUCTION.md). The `compare-farsense`
 command compares its complex-ratio projection and multi-group autocorrelation

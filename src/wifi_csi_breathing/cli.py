@@ -51,6 +51,9 @@ def main(argv=None):
     farsense = sub.add_parser('compare-farsense', help='Compare adapted FarSense core with existing FFT and ACF candidates')
     farsense.add_argument('--manifest', type=Path, required=True, help='Local JSON listing recordings and predefined minute starts')
     farsense.add_argument('--output', type=Path, required=True, help='New directory; never overwrite a run')
+    wiresp = sub.add_parser('compare-wiresp', help='Compare adapted WiResP with FarSense and existing FFT/ACF candidates')
+    wiresp.add_argument('--manifest', type=Path, required=True, help='Same predefined-minute manifest as compare-farsense')
+    wiresp.add_argument('--output', type=Path, required=True, help='New directory; never overwrite a run')
     archive = sub.add_parser('archive-joint', help='Copy six verified joint transfers without altering source labels')
     archive.add_argument('--source-root', type=Path, required=True)
     archive.add_argument('--batch', required=True)
@@ -107,6 +110,10 @@ def main(argv=None):
             from .farsense_comparison import compare_farsense
             report = compare_farsense(args.manifest, args.output)
             print(f"Completed {len(report['results'])} FarSense-core comparison minutes: {args.output / 'index.html'}")
+        elif args.command == 'compare-wiresp':
+            from .wiresp_comparison import compare_wiresp
+            report = compare_wiresp(args.manifest, args.output)
+            print(f"Completed {len(report['results'])} WiResP comparison minutes: {args.output / 'index.html'}")
         elif args.command == 'archive-joint':
             from .batch_diagnostics import archive_batch
             report = archive_batch(args.source_root, args.batch, args.corrections, args.output)
