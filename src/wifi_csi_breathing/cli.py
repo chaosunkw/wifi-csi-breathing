@@ -48,6 +48,9 @@ def main(argv=None):
                       help='Original gap resets, or bounded short-gap state preservation with visible gaps')
     for name, default in (('tx', 1), ('rx', 1), ('reference-rx', 2), ('subcarrier', 15)):
         rate.add_argument('--' + name, type=int, default=default)
+    farsense = sub.add_parser('compare-farsense', help='Compare adapted FarSense core with existing FFT and ACF candidates')
+    farsense.add_argument('--manifest', type=Path, required=True, help='Local JSON listing recordings and predefined minute starts')
+    farsense.add_argument('--output', type=Path, required=True, help='New directory; never overwrite a run')
     archive = sub.add_parser('archive-joint', help='Copy six verified joint transfers without altering source labels')
     archive.add_argument('--source-root', type=Path, required=True)
     archive.add_argument('--batch', required=True)
@@ -100,6 +103,10 @@ def main(argv=None):
                                   args.tx, args.rx, args.reference_rx, args.subcarrier, args.shape_policy,
                                   args.gap_policy)
             print(f"Completed 60 s rate comparison ({report['comparison']['status']}): {args.output / 'index.html'}")
+        elif args.command == 'compare-farsense':
+            from .farsense_comparison import compare_farsense
+            report = compare_farsense(args.manifest, args.output)
+            print(f"Completed {len(report['results'])} FarSense-core comparison minutes: {args.output / 'index.html'}")
         elif args.command == 'archive-joint':
             from .batch_diagnostics import archive_batch
             report = archive_batch(args.source_root, args.batch, args.corrections, args.output)

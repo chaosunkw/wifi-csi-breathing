@@ -1,5 +1,12 @@
 # Wi-Fi CSI Breathing
 
+The first literature baseline is an independent, adapted
+[FarSense core reproduction](docs/FARSENSE_REPRODUCTION.md). The `compare-farsense`
+command compares its complex-ratio projection and multi-group autocorrelation
+with the existing LogRatio FFT/ACF candidates on predefined minutes. It includes
+per-block numerical audits and empty controls; the paper's large-motion exclusion
+module is not implemented. Existing replay and analysis defaults are unchanged.
+
 Independent **offline analysis and paced replay** of Intel 5300 CSI recordings.
 Version 0.1.0 is a research-preview baseline, not a validated breathing detector.
 See [baseline notes](docs/BASELINE.md) for the preserved scope and next milestone.
