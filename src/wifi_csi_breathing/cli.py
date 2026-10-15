@@ -54,6 +54,9 @@ def main(argv=None):
     wiresp = sub.add_parser('compare-wiresp', help='Compare adapted WiResP with FarSense and existing FFT/ACF candidates')
     wiresp.add_argument('--manifest', type=Path, required=True, help='Same predefined-minute manifest as compare-farsense')
     wiresp.add_argument('--output', type=Path, required=True, help='New directory; never overwrite a run')
+    vitalcsi = sub.add_parser('compare-vitalcsi', help='Compare adapted VitalCSI with four existing baselines')
+    vitalcsi.add_argument('--manifest', type=Path, required=True, help='Same predefined-minute comparison manifest')
+    vitalcsi.add_argument('--output', type=Path, required=True, help='New directory; never overwrite a run')
     archive = sub.add_parser('archive-joint', help='Copy six verified joint transfers without altering source labels')
     archive.add_argument('--source-root', type=Path, required=True)
     archive.add_argument('--batch', required=True)
@@ -114,6 +117,10 @@ def main(argv=None):
             from .wiresp_comparison import compare_wiresp
             report = compare_wiresp(args.manifest, args.output)
             print(f"Completed {len(report['results'])} WiResP comparison minutes: {args.output / 'index.html'}")
+        elif args.command == 'compare-vitalcsi':
+            from .vitalcsi_comparison import compare_vitalcsi
+            report = compare_vitalcsi(args.manifest, args.output)
+            print(f"Completed {len(report['results'])} VitalCSI comparison minutes: {args.output / 'index.html'}")
         elif args.command == 'archive-joint':
             from .batch_diagnostics import archive_batch
             report = archive_batch(args.source_root, args.batch, args.corrections, args.output)

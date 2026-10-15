@@ -1,5 +1,12 @@
 # Wi-Fi CSI Breathing
 
+The third batch adds an independent [VitalCSI adaptation](docs/VITALCSI_REPRODUCTION.md).
+`compare-vitalcsi` compares amplitude PCA, FFT/breath counting and quality-weighted
+Kalman fusion with the four existing methods on the same predefined minutes.
+PCA scores, spectra, onset decisions, component quality and fusion weights are
+exported. The paper's ambiguous variance gate and unspecified BSSF/filter/Kalman
+settings are documented as adaptation choices, not an exact author replication.
+
 For the second reproduction batch, see [WiResP adapted reproduction](docs/WIRESP_REPRODUCTION.md).
 The `compare-wiresp` command compares its amplitude/ACF enhancement pipeline with
 the unchanged FarSense core and LogRatio FFT/ACF candidates on predefined minutes.
@@ -45,9 +52,10 @@ The radar project is a reference, not a runtime dependency.
   with two-panel plots on the common Ubuntu host-receipt timeline. See
   [joint analysis](docs/JOINT_ANALYSIS.md); this is not physiological ground truth.
 
-There is no live input, trained classifier, automatic best-channel search,
-data augmentation, ground-truth accuracy claim, or millimeter displacement output.
-These are deliberately outside this initial scaffold.
+There is no live input, trained classifier, data augmentation, ground-truth
+accuracy claim, or millimeter displacement output. The original replay uses
+fixed feature channels; literature-comparison commands perform their documented
+channel or component selection separately.
 
 ## Start on this Mac
 
